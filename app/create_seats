@@ -1,0 +1,13 @@
+# create_seats.py
+
+import json
+
+def generate_seats_json(flight_id):
+    seats = []
+    for i in range(1, 181):
+        seats.append({
+            "flight_id": flight_id,
+            "seat_number": str(i),
+            "is_booked": False
+        })
+    return seats  # return Python object, not json.dumps
