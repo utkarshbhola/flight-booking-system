@@ -1,11 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
 class UserCreate(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     password: str
 
+    class Config:
+        orm_mode = True  # This tells Pydantic to convert ORM model to dict
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+    
 class FlightCreate(BaseModel):
     id: int
     flight_number: str
@@ -13,9 +20,11 @@ class FlightCreate(BaseModel):
     arrival_city: str
     departure_time: datetime
     arrival_time: datetime
-    seats: int
+    total_seats: int
     price: int
 
+class FlightUpdate(FlightCreate):
+    id: int
 class SeatCreate(BaseModel):
     flight_id: int
     seat_number: str
