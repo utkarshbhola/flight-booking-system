@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Bookings</title>
+</head>
+<body>
+  <h2>My Bookings</h2>
+  <table id="bookingsTable" border="1">
+    <thead>
+      <tr>
+        <th>Booking ID</th>
+        <th>Flight Number</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Seat Number</th>
+        <th>Booking Time</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+async function loadBookings() {
+  const userId = localStorage.getItem("user_id");
+  const res = await fetch(`http://127.0.0.1:8000/bookings/${userId}`);
+  const data = await res.json();
+
+  const tableBody = document.querySelector("#bookingsTable tbody");
+  tableBody.innerHTML = "";
+
+  data.forEach(b => {
+    const row = `
+      <tr>
+        <td>${b.id}</td>
+        <td>${b.flight.flight_number}</td>
+        <td>${b.flight.departure_city}</td>
+        <td>${b.flight.arrival_city}</td>
+        <td>${b.seat.seat_number}</td>
+        <td>${new Date(b.booking_time).toLocaleString()}</td>
+      </tr>
+    `;
+    tableBody.innerHTML += row;
+  });
+}
+loadBookings();
+</script>
+</body>
+</html>

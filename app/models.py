@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
+from datetime import datetime
+from sqlalchemy.sql import func
 
 class User(Base):
     __tablename__ = "users"
@@ -42,10 +44,13 @@ class Seat(Base):
 
 class Booking(Base):
     __tablename__ = "bookings"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    flight_id = Column(Integer, ForeignKey("flights.id"))
-    seat_id = Column(Integer, ForeignKey("seats.id"))
 
-    user = relationship("User", back_populates="bookings")
-    flight = relationship("Flight", back_populates="bookings")
+    id = Column(Integer, primary_key=True, index=True)
+    flight_id = Column(Integer, ForeignKey("flights.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    seat_id = Column(Integer, ForeignKey("seats.id"))
+    booking_time = Column(DateTime(timezone=True), server_default=func.now())
+
+    flight = relationship("Flight")
+    user = relationship("User")
+    seat = relationship("Seat")

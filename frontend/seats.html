@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seat Selection</title>
+  <style>
+    body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+    h2 { text-align: center; }
+    .airplane {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .row {
+      display: flex;
+      margin: 5px 0;
+      gap: 20px; /* aisle space */
+    }
+    .side {
+      display: flex;
+      gap: 5px;
+    }
+    .seat {
+      width: 40px;
+      height: 40px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+      text-align: center;
+    }
+    .available { background: green; color: white; }
+    .booked { background: red; color: white; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<h2>Select Seats</h2>
+<div id="seats" class="airplane"></div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const flightId = params.get("flight_id");
+
+async function loadSeats() {
+  const res = await fetch(`http://127.0.0.1:8000/seats/${flightId}`);
+  const data = await res.json();
+
+  const groupedSeats = {};
+  data.seats.forEach(seat => {
+    const rowNumber = seat.seat_number.match(/\d+/)[0]; // extract number
+    if (!groupedSeats[rowNumber]) groupedSeats[rowNumber] = [];
+    groupedSeats[rowNumber].push(seat);
+  });
+
+  const seatsDiv = document.getElementById("seats");
+  seatsDiv.innerHTML = "";
+
+  Object.keys(groupedSeats).sort((a,b)=>a-b).forEach(rowNum => {
+    const rowDiv = document.createElement("div");
+    rowDiv.className = "row";
+
+    const leftSide = document.createElement("div");
+    leftSide.className = "side";
+    const rightSide = document.createElement("div");
+    rightSide.className = "side";
+
+    groupedSeats[rowNum].sort((a,b)=>a.seat_number.localeCompare(b.seat_number));
+    groupedSeats[rowNum].forEach(seat => {
+      const btn = document.createElement("button");
+      btn.textContent = seat.seat_number;
+      btn.className = "seat " + (seat.is_booked ? "booked" : "available");
+      btn.disabled = seat.is_booked;
+      if (!seat.is_booked) btn.onclick = () => bookSeat(seat.seat_number);
+
+      // A,B,C go left | D,E,F go right
+      if (seat.seat_number.endsWith("A") || seat.seat_number.endsWith("B") || seat.seat_number.endsWith("C")) {
+        leftSide.appendChild(btn);
+      } else {
+        rightSide.appendChild(btn);
+      }
+    });
+
+    rowDiv.appendChild(leftSide);
+    rowDiv.appendChild(rightSide);
+    seatsDiv.appendChild(rowDiv);
+  });
+}
+
+async function bookSeat(seatNumber) {
+  const userId = localStorage.getItem("user_id");
+
+  // Step 1: Get seat ID from backend by seat number
+  const seatsRes = await fetch(`http://127.0.0.1:8000/seats/${flightId}`);
+  const seatsData = await seatsRes.json();
+  const seat = seatsData.seats.find(s => s.seat_number === seatNumber);
+
+  if (!seat) {
+    alert("Seat not found!");
+    return;
+  }
+
+  // Step 2: Create booking in bookings table
+  const bookingRes = await fetch(`http://127.0.0.1:8000/bookings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      flight_id: flightId,
+      seat_id: seat.id,
+      user_id: userId
+    })
+  });
+
+  const bookingData = await bookingRes.json();
+
+  if (bookingRes.ok) {
+    alert("Booking successful!");
+    loadSeats(); // Refresh seat layout
+  } else {
+    alert(bookingData.detail || "Booking failed!");
+  }
+}
+
+
+loadSeats();
+</script>
+
+</body>
+</html>

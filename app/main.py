@@ -1,17 +1,27 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine
-from models import Base, User, Flight, Seat
-from schemas import UserCreate, FlightCreate, SeatCreate, UserLogin
+from models import Base, User, Flight, Seat, Booking
+from schemas import UserCreate, FlightCreate, SeatCreate, UserLogin, BookingCreate
 import traceback
 import util
 from sqlalchemy.exc import SQLAlchemyError
 from passlib.context import CryptContext
 from fastapi import APIRouter, status
-
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- Initialize App and DB ---
 app = FastAPI()
+
+# CORS Middleware
+# Allow frontend to call backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or ["http://localhost:5173"] if React is on Vite
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow GET, POST, PUT, DELETE, OPTIONS
+    allow_headers=["*"],
+)
 
 # Dependency
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -126,21 +136,58 @@ def get_seats(flight_id: int, db: Session = Depends(get_db)):
 
 @app.post("/seats/{flight_id}")
 def create_seats_for_flight(flight_id: int, db: Session = Depends(get_db)):
-    try:
-        seats = []
-        rows = 30
-        cols = ['A', 'B', 'C', 'D', 'E', 'F']
+    existing_seats = db.query(Seat).filter(Seat.flight_id == flight_id).count()
+    if existing_seats > 0:
+        return {"message": "Seats already created for this flight"}
 
-        for row in range(1, rows + 1):
-            for col in cols:
-                seat_number = f"{row}{col}"
-                seat = Seat(flight_id=flight_id, seat_number=seat_number, is_booked=False)
-                seats.append(seat)
+    seats = []
+    rows = 30
+    cols = ['A', 'B', 'C', 'D', 'E', 'F']
 
-        db.bulk_save_objects(seats)
-        db.commit()
-        return {"message": f"{len(seats)} seats created for flight {flight_id}"}
-    except Exception as e:
-        db.rollback()
-        print(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    for row in range(1, rows + 1):
+        for col in cols:
+            seat_number = f"{row}{col}"
+            seat = Seat(flight_id=flight_id, seat_number=seat_number, is_booked=False)
+            seats.append(seat)
+
+    db.bulk_save_objects(seats)
+    db.commit()
+    return {"message": f"{len(seats)} seats created for flight {flight_id}"}
+
+### --------------------------------
+# 🛫 BOOKINGS
+### --------------------------------
+
+
+
+@app.post("/bookings")
+def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
+    seat = db.query(Seat).filter(
+        Seat.id == booking.seat_id,
+        Seat.flight_id == booking.flight_id
+    ).first()
+
+    if not seat:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    if seat.is_booked:
+        raise HTTPException(status_code=400, detail="Seat already booked")
+
+    seat.is_booked = True
+    db.commit()
+
+    new_booking = Booking(
+        flight_id=booking.flight_id,
+        seat_id=booking.seat_id,
+        user_id=booking.user_id
+    )
+    db.add(new_booking)
+    db.commit()
+    db.refresh(new_booking)
+
+    return {"message": "Booking successful", "booking_id": new_booking.id}
+
+
+@app.get("/bookings/{user_id}")
+def get_user_bookings(user_id: int, db: Session = Depends(get_db)):
+    bookings = db.query(Booking).filter(Booking.user_id == user_id).all()
+    return bookings

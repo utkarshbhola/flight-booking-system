@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login / Sign Up</title>
+  <style>
+    body { font-family: Arial; background: #f4f4f4; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .container { background: white; padding: 20px; border-radius: 8px; width: 300px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h2 { text-align: center; }
+    input { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+    button { width: 100%; padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 5px; margin-top: 10px; cursor: pointer; }
+    button:hover { background: #45a049; }
+    .switch { text-align: center; margin-top: 10px; cursor: pointer; color: blue; text-decoration: underline; }
+    .hidden { display: none; }
+    .error { color: red; text-align: center; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Login Form -->
+  <div id="loginForm">
+    <h2>Login</h2>
+    <input type="email" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <p id="loginError" class="error"></p>
+    <div class="switch" onclick="showSignUp()">Don't have an account? Sign Up</div>
+  </div>
+
+  <!-- Sign Up Form -->
+  <div id="signUpForm" class="hidden">
+    <h2>Sign Up</h2>
+    <input type="text" id="signUpName" placeholder="Name">
+    <input type="email" id="signUpEmail" placeholder="Email">
+    <input type="password" id="signUpPassword" placeholder="Password">
+    <button onclick="signUp()">Sign Up</button>
+    <p id="signUpError" class="error"></p>
+    <div class="switch" onclick="showLogin()">Already have an account? Login</div>
+  </div>
+</div>
+
+<script>
+function showSignUp() {
+  document.getElementById("loginForm").classList.add("hidden");
+  document.getElementById("signUpForm").classList.remove("hidden");
+}
+
+function showLogin() {
+  document.getElementById("signUpForm").classList.add("hidden");
+  document.getElementById("loginForm").classList.remove("hidden");
+}
+
+async function login() {
+  const email = document.getElementById("loginEmail").value;
+  const password = document.getElementById("loginPassword").value;
+  const errorElem = document.getElementById("loginError");
+
+  const res = await fetch("http://127.0.0.1:8000/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+
+  const data = await res.json();
+
+ if (res.ok) {
+  localStorage.setItem("email", email); // Store email to identify user
+  alert("Login successful!");
+  window.location.href = "dashboard.html";
+}
+    else {
+        errorElem.textContent = data.detail || "Login failed";
+    }
+    }
+
+async function signUp() {
+  const name = document.getElementById("signUpName").value;
+  const email = document.getElementById("signUpEmail").value;
+  const password = document.getElementById("signUpPassword").value;
+  const errorElem = document.getElementById("signUpError");
+
+  const res = await fetch("http://127.0.0.1:8000/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password })
+  });
+
+  const data = await res.json();
+
+  if (res.ok) {
+    alert("Sign Up successful! Please login.");
+    showLogin();
+  } else {
+    errorElem.textContent = data.detail || "Sign Up failed";
+  }
+}
+</script>
+
+</body>
+</html>

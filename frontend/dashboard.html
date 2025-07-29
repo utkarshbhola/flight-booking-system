@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flight Dashboard</title>
+  <style>
+    body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+    h2 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+    button { background: #4CAF50; color: white; padding: 5px 10px; border: none; cursor: pointer; }
+    button:hover { background: #45a049; }
+  </style>
+</head>
+<body>
+<h2 id="welcome"></h2>
+<h2>Available Flights</h2>
+<a href="bookings.html">Check your bookings</a>
+<table id="flightsTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Flight Number</th>
+      <th>From</th>
+      <th>To</th>
+      <th>Price</th>
+      <th>Book</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+async function loadFlights() {
+  const res = await fetch("http://127.0.0.1:8000/flights");
+  const data = await res.json();
+  if (!localStorage.getItem("email")) {
+    window.location.href = "login.html";
+  }
+  else{
+  const email = localStorage.getItem("email");
+  document.getElementById("welcome").textContent = `Welcome, ${email}`;
+  }
+  const flights = data.flights;
+  const tableBody = document.querySelector("#flightsTable tbody");
+  tableBody.innerHTML = "";
+
+  flights.forEach(flight => {
+    const row = `
+      <tr>
+        <td>${flight.id}</td>
+        <td>${flight.flight_number}</td>
+        <td>${flight.departure_city}</td>
+        <td>${flight.arrival_city}</td>
+        <td>₹${flight.price}</td>
+        <td><button onclick="bookFlight(${flight.id})">Book</button></td>
+      </tr>
+    `;
+    tableBody.innerHTML += row;
+  });
+}
+
+function bookFlight(flightId) {
+  // Redirect to seats page for this flight
+  window.location.href = `seats.html?flight_id=${flightId}`;
+}
+
+loadFlights();
+</script>
+
+</body>
+</html>

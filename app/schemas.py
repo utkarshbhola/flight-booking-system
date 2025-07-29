@@ -29,3 +29,8 @@ class SeatCreate(BaseModel):
     flight_id: int
     seat_number: str
     is_booked: bool
+
+class BookingCreate(BaseModel):
+    flight_id: int
+    seat_id: int
+    user_id: int
