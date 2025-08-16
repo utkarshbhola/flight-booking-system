@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine
 from models import Base, User, Flight, Seat, Booking
@@ -7,23 +7,20 @@ import traceback
 import util
 from sqlalchemy.exc import SQLAlchemyError
 from passlib.context import CryptContext
-from fastapi import APIRouter, status
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- Initialize App and DB ---
 app = FastAPI()
 
 # CORS Middleware
-# Allow frontend to call backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or ["http://localhost:5173"] if React is on Vite
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],  # Allow GET, POST, PUT, DELETE, OPTIONS
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Dependency
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -34,10 +31,14 @@ def get_db():
     finally:
         db.close()
 
+
 # Create the database tables
 Base.metadata.create_all(bind=engine)
 
-#home page
+
+# -------------------------------
+# 🏠 Home
+# -------------------------------
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Flight Booking System API!"}
@@ -49,14 +50,11 @@ def read_root():
 @app.get("/users")
 def read_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
-    return {"users": users}
-router = APIRouter(tags=["Authentication"])
+    return {"users": [{"id": u.id, "name": u.name, "email": u.email} for u in users]}
+
 
 @app.post("/login")
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
-    print("Email received:", user_credentials.email)
-    print("Password received:", user_credentials.password)
-
     user = db.query(User).filter(User.email == user_credentials.email).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -64,28 +62,27 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     if not util.verify_password(user_credentials.password, user.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    return {"message": "Login successful"}
+    return {"message": "Login successful", "user_id": user.id, "name": user.name}
 
 
 @app.post("/users")
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    
-    # Hash the password - user password should be hashed before storing
     hashed_password = util.hash_password(user.password)
     user.password = hashed_password
-    
     db_user = User(name=user.name, email=user.email, password=user.password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return {"user_id": db_user.id}
+    return {"user_id": db_user.id, "name": db_user.name, "email": db_user.email}
+
 
 @app.get("/users/{user_id}")
 def read_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user": user}
+    return {"id": user.id, "name": user.name, "email": user.email}
+
 
 # -------------------------------
 # ✈️ FLIGHTS
@@ -93,7 +90,22 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
 @app.get("/flights")
 def get_flights(db: Session = Depends(get_db)):
     flights = db.query(Flight).all()
-    return {"flights": flights}
+    return {
+        "flights": [
+            {
+                "id": f.id,
+                "flight_number": f.flight_number,
+                "departure_city": f.departure_city,
+                "arrival_city": f.arrival_city,
+                "departure_time": f.departure_time,
+                "arrival_time": f.arrival_time,
+                "total_seats": f.total_seats,
+                "price": f.price,
+            }
+            for f in flights
+        ]
+    }
+
 
 @app.post("/flights")
 def create_flight(flight: FlightCreate, db: Session = Depends(get_db)):
@@ -106,7 +118,7 @@ def create_flight(flight: FlightCreate, db: Session = Depends(get_db)):
             departure_time=flight.departure_time,
             arrival_time=flight.arrival_time,
             total_seats=flight.total_seats,
-            price=flight.price
+            price=flight.price,
         )
         db.add(db_flight)
         db.commit()
@@ -115,24 +127,47 @@ def create_flight(flight: FlightCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Database insertion failed", headers={"X-Error": str(e)})
+        raise HTTPException(status_code=500, detail="Database insertion failed")
+
+
+@app.delete("/flights/{flight_id}")
+def delete_flight(flight_id: int, db: Session = Depends(get_db)):
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if not flight:
+        raise HTTPException(status_code=404, detail="Flight not found")
+
+    # also delete seats + bookings manually
+    db.query(Booking).filter(Booking.flight_id == flight_id).delete()
+    db.query(Seat).filter(Seat.flight_id == flight_id).delete()
+    db.delete(flight)
+    db.commit()
+
+    return {"message": f"Flight {flight_id} deleted"}
+
 
 # -------------------------------
 # 💺 SEATS
 # -------------------------------
 @app.put("/seats/book")
 def book_seat(seat: SeatCreate, db: Session = Depends(get_db)):
-    db_seat = db.query(Seat).filter(Seat.flight_id == seat.flight_id, Seat.seat_number == seat.seat_number).first()
+    db_seat = db.query(Seat).filter(
+        Seat.flight_id == seat.flight_id, Seat.seat_number == seat.seat_number
+    ).first()
     if not db_seat:
         raise HTTPException(status_code=404, detail="Seat not found")
     db_seat.is_booked = seat.is_booked
     db.commit()
-    return {"message": f"Seat {seat.seat_number} on flight {seat.flight_id} booking updated to {seat.is_booked}"}
+    return {
+        "message": f"Seat {seat.seat_number} on flight {seat.flight_id} booking updated",
+        "seat": {"id": db_seat.id, "seat_number": db_seat.seat_number, "is_booked": db_seat.is_booked},
+    }
+
 
 @app.get("/seats/{flight_id}")
 def get_seats(flight_id: int, db: Session = Depends(get_db)):
     seats = db.query(Seat).filter(Seat.flight_id == flight_id).all()
-    return {"seats": seats}
+    return {"seats": [{"id": s.id, "seat_number": s.seat_number, "is_booked": s.is_booked} for s in seats]}
+
 
 @app.post("/seats/{flight_id}")
 def create_seats_for_flight(flight_id: int, db: Session = Depends(get_db)):
@@ -142,7 +177,7 @@ def create_seats_for_flight(flight_id: int, db: Session = Depends(get_db)):
 
     seats = []
     rows = 30
-    cols = ['A', 'B', 'C', 'D', 'E', 'F']
+    cols = ["A", "B", "C", "D", "E", "F"]
 
     for row in range(1, rows + 1):
         for col in cols:
@@ -154,17 +189,14 @@ def create_seats_for_flight(flight_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"{len(seats)} seats created for flight {flight_id}"}
 
-### --------------------------------
+
+# -------------------------------
 # 🛫 BOOKINGS
-### --------------------------------
-
-
-
+# -------------------------------
 @app.post("/bookings")
 def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     seat = db.query(Seat).filter(
-        Seat.id == booking.seat_id,
-        Seat.flight_id == booking.flight_id
+        Seat.id == booking.seat_id, Seat.flight_id == booking.flight_id
     ).first()
 
     if not seat:
@@ -176,18 +208,34 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     db.commit()
 
     new_booking = Booking(
-        flight_id=booking.flight_id,
-        seat_id=booking.seat_id,
-        user_id=booking.user_id
+        flight_id=booking.flight_id, seat_id=booking.seat_id, user_id=booking.user_id
     )
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
 
-    return {"message": "Booking successful", "booking_id": new_booking.id}
+    return {
+        "message": "Booking successful",
+        "booking": {
+            "id": new_booking.id,
+            "flight_id": new_booking.flight_id,
+            "seat_id": new_booking.seat_id,
+            "user_id": new_booking.user_id,
+        },
+    }
 
 
 @app.get("/bookings/{user_id}")
 def get_user_bookings(user_id: int, db: Session = Depends(get_db)):
     bookings = db.query(Booking).filter(Booking.user_id == user_id).all()
-    return bookings
+    return {
+        "bookings": [
+            {
+                "id": b.id,
+                "flight_id": b.flight_id,
+                "seat_id": b.seat_id,
+                "user_id": b.user_id,
+            }
+            for b in bookings
+        ]
+    }
