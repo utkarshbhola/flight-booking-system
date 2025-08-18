@@ -8,7 +8,7 @@ import util
 from sqlalchemy.exc import SQLAlchemyError
 from passlib.context import CryptContext
 from fastapi.middleware.cors import CORSMiddleware
-
+from kafka_producer import send_kafka_message
 # --- Initialize App and DB ---
 app = FastAPI()
 
@@ -194,7 +194,7 @@ def create_seats_for_flight(flight_id: int, db: Session = Depends(get_db)):
 # 🛫 BOOKINGS
 # -------------------------------
 @app.post("/bookings")
-def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
+async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     seat = db.query(Seat).filter(
         Seat.id == booking.seat_id, Seat.flight_id == booking.flight_id
     ).first()
@@ -213,6 +213,15 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
+
+    # --- 🔥 Publish Kafka Event ---
+    await send_kafka_message("bookings", {
+        "event": "booking_created",
+        "booking_id": new_booking.id,
+        "flight_id": new_booking.flight_id,
+        "seat_id": new_booking.seat_id,
+        "user_id": new_booking.user_id,
+    })
 
     return {
         "message": "Booking successful",
